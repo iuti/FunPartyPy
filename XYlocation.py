@@ -4,6 +4,102 @@ import numpy as np
 import socket
 import json
 import time
+import math
+from pathlib import Path
+
+
+class EllipseRegion:
+    def __init__(self, config_path: Path | str, frame_width: int, frame_height: int):
+        self.valid = False
+        self.scale_x = 1.0
+        self.scale_y = 1.0
+        self.cos_angle = 1.0
+        self.sin_angle = 0.0
+        self.cx = 0.0
+        self.cy = 0.0
+        self.a = 0.0
+        self.b = 0.0
+        self.polygon = None
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            print(f"[EllipseRegion] calibration config not found at {config_path}, ellipse filter disabled.")
+            return
+        except json.JSONDecodeError as exc:
+            print(f"[EllipseRegion] failed to parse calibration config: {exc}. Ellipse filter disabled.")
+            return
+
+        ellipse = data.get("ellipse")
+        frame_info = data.get("frame") or {}
+        if not ellipse:
+            print("[EllipseRegion] ellipse data missing in calibration config. Ellipse filter disabled.")
+            return
+
+        calib_width = frame_info.get("width")
+        calib_height = frame_info.get("height")
+        if not calib_width or not calib_height:
+            print("[EllipseRegion] frame dimensions missing in calibration config. Ellipse filter disabled.")
+            return
+
+        self.scale_x = frame_width / calib_width
+        self.scale_y = frame_height / calib_height
+        if self.scale_x <= 0 or self.scale_y <= 0:
+            print("[EllipseRegion] invalid scale factors derived from calibration config. Ellipse filter disabled.")
+            return
+
+        self.cx = float(ellipse.get("center_x", 0.0))
+        self.cy = float(ellipse.get("center_y", 0.0))
+        self.a = float(ellipse.get("major_axis", 0.0)) / 2.0
+        self.b = float(ellipse.get("minor_axis", 0.0)) / 2.0
+        angle_deg = float(ellipse.get("angle_deg", 0.0))
+
+        if self.a <= 0 or self.b <= 0:
+            print("[EllipseRegion] invalid ellipse axes in calibration config. Ellipse filter disabled.")
+            return
+
+        angle_rad = math.radians(angle_deg)
+        self.cos_angle = math.cos(angle_rad)
+        self.sin_angle = math.sin(angle_rad)
+
+        # Precompute polygon for drawing in current frame coordinates
+        points = []
+        for deg in range(0, 360, 2):
+            phi = math.radians(deg)
+            cos_phi = math.cos(phi)
+            sin_phi = math.sin(phi)
+            x_calib = self.cx + self.a * cos_phi * self.cos_angle - self.b * sin_phi * self.sin_angle
+            y_calib = self.cy + self.a * cos_phi * self.sin_angle + self.b * sin_phi * self.cos_angle
+            x_cur = int(round(x_calib * self.scale_x))
+            y_cur = int(round(y_calib * self.scale_y))
+            points.append([x_cur, y_cur])
+
+        if points:
+            self.polygon = np.array(points, dtype=np.int32)
+
+        self.valid = True
+        print("[EllipseRegion] ellipse filter enabled.")
+
+    def contains(self, x: float, y: float) -> bool:
+        if not self.valid:
+            return True
+
+        x_calib = x / self.scale_x
+        y_calib = y / self.scale_y
+        dx = x_calib - self.cx
+        dy = y_calib - self.cy
+
+        x_rot = dx * self.cos_angle + dy * self.sin_angle
+        y_rot = -dx * self.sin_angle + dy * self.cos_angle
+
+        value = (x_rot / self.a) ** 2 + (y_rot / self.b) ** 2
+        return value <= 1.0
+
+    def draw(self, frame, color=(0, 255, 255), thickness=2):
+        if not self.valid or self.polygon is None:
+            return
+        cv2.polylines(frame, [self.polygon], isClosed=True, color=color, thickness=thickness)
 
 # モデル読み込み
 model = YOLO("yolov8n.pt")
@@ -19,6 +115,8 @@ cap = cv2.VideoCapture(1)
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 print(f"カメラ解像度: {frame_width}x{frame_height}")
+
+ellipse_region = EllipseRegion(Path(__file__).parent / "calibration_config.json", frame_width, frame_height)
 
 # トラッキング用の色を準備（より多くの色を用意）
 colors = np.random.randint(0, 255, size=(50, 3), dtype="uint8")
@@ -53,6 +151,9 @@ while True:
             # 足元の座標を計算（バウンディングボックスの下辺中央）
             foot_x = int((x1 + x2) / 2)
             foot_y = y2  # バウンディングボックスの底辺
+
+            if not ellipse_region.contains(foot_x, foot_y):
+                continue
             
             # 座標を正規化（0-1の範囲に変換）
             normalized_x = foot_x / frame_width
@@ -117,6 +218,8 @@ while True:
                 (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     cv2.putText(frame, f"UDP: {UDP_IP}:{UDP_PORT}", 
                 (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+    ellipse_region.draw(frame)
     
     cv2.imshow("Person Tracking with UDP", frame)
     

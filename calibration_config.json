@@ -1,0 +1,30 @@
+{
+  "timestamp": 1760002799.5280232,
+  "circle": {
+    "center_x": 597.0,
+    "center_y": 767.0,
+    "radius": 582.0
+  },
+  "ellipse": {
+    "center_x": 672.5914916992188,
+    "center_y": 469.7727966308594,
+    "major_axis": 470.2872009277344,
+    "minor_axis": 888.26318359375,
+    "angle_deg": 90.83233642578125
+  },
+  "correction": {
+    "scale_major": 1.198827535011736,
+    "scale_minor": 2.282736364086315
+  },
+  "frame": {
+    "width": 1344,
+    "height": 768
+  },
+  "metrics": {
+    "ellipse_candidates": 25
+  },
+  "source": {
+    "type": "image",
+    "path": "C:\\desktop\\funCreate2\\FunPartyPy\\calibImg\\Gemini_Generated_Image_o72p9ro72p9ro72p.png"
+  }
+}

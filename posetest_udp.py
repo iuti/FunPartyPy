@@ -124,7 +124,7 @@ def calc_angle_similarity(current_angles, target_angles):
     
     return sum(errors) / len(errors) if errors else float('inf')
 
-def check_all_pose_matches(current_angles, threshold=15.0):
+def check_all_pose_matches(current_angles, threshold=10.0):
     """現在のポーズが全ポーズの中でどれと合致しているかチェック"""
     matched_poses = []
     
