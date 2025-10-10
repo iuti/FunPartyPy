@@ -135,7 +135,7 @@ UDP_IP = "127.0.0.1"  # Unityが動作するIPアドレス（localhost）
 UDP_PORT = 12345      # Unityで受信するポート番号
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-cap = cv2.VideoCapture(2)
+cap = cv2.VideoCapture(1)
 
 # カメラの解像度を取得
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))

@@ -138,8 +138,8 @@ class HumanDetector:
         try:
             max_payload = 60000  # UDP安全域
             scale = 1.0
-            # 左右反転してから送信
-            resized_image = cv2.flip(image, 1)
+            # そのまま送信（左右反転は Unity 側で処理する）
+            resized_image = image
 
             while True:
                 success, buffer = cv2.imencode('.png', resized_image)
@@ -154,9 +154,9 @@ class HumanDetector:
                 if scale < 0.1:
                     raise ValueError("画像を十分に縮小できませんでした")
 
-                height, width = image.shape[:2]
+                height, width = resized_image.shape[:2]
                 new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
-                resized_image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+                resized_image = cv2.resize(resized_image, new_size, interpolation=cv2.INTER_AREA)
 
             size = struct.pack("I", len(data))
             self.sock.sendto(size + data, (self.unity_ip, self.unity_port))
