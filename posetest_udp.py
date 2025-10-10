@@ -141,7 +141,7 @@ def check_all_pose_matches(current_angles, threshold=10.0):
 # UDP通信を初期化
 init_udp_communication()
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 
 with mp_pose.Pose() as pose:
     while cap.isOpened():

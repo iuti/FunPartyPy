@@ -247,12 +247,12 @@ class HumanDetector:
         
         # 元画像と同じサイズのマスクを作成
         mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-        
+
         for result in results:
             if result.masks is not None:
                 masks = result.masks.data.cpu().numpy()
                 boxes = result.boxes
-                
+
                 for i, (box_mask, box) in enumerate(zip(masks, boxes)):
                     # 人物クラス（クラス0）かつ信頼度が閾値以上
                     if int(box.cls) == 0 and float(box.conf) >= confidence_threshold:
@@ -261,44 +261,44 @@ class HumanDetector:
                         # マスクを0-255の範囲に変換
                         binary_mask = (resized_mask > 0.5).astype(np.uint8) * 255
                         mask = cv2.bitwise_or(mask, binary_mask)
-        
+
         # 背景除去
         result_frame = frame.copy()
         result_frame[mask == 0] = [0, 0, 0]  # 背景を黒にする
-        
+
         return result_frame, mask
-    
+
     def process_frame(self, frame):
         """
         フレームを処理して人物検出と背景除去を行う
         """
         # 人物検出
         humans = self.detect_humans(frame)
-        
+
         # 検出結果を描画
         detection_frame = frame.copy()
         for human in humans:
             bbox = human['bbox']
             confidence = human['confidence']
-            
+
             # バウンディングボックスを描画
             cv2.rectangle(detection_frame, 
                          (bbox[0], bbox[1]), 
                          (bbox[2], bbox[3]), 
                          (0, 255, 0), 2)
-            
+
             # 信頼度を表示
             cv2.putText(detection_frame, 
                        f'Person: {confidence:.2f}',
                        (bbox[0], bbox[1] - 10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
+
         # 従来の背景除去（表示用）
         bg_removed_frame, mask = self.remove_background(frame)
-        
+
         # 人だけくり抜いた透明度付き画像をUnityに送信
         cropped_human = self.send_cropped_human_to_unity(frame)
-        
+
         return detection_frame, bg_removed_frame, mask, cropped_human
 
 def main():
@@ -363,3 +363,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

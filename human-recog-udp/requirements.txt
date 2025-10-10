@@ -8,64 +8,11 @@ import struct
 
 class HumanDetector:
     def __init__(self, unity_ip='127.0.0.1', unity_port=9999):
-        # デバイス設定
-        self.use_cuda = torch.cuda.is_available()
-        self.device_str = "cuda:0" if self.use_cuda else "cpu"
-        print(f"[HumanDetector] Torch CUDA available: {self.use_cuda}, loading models on {self.device_str}")
-
-        # YOLOv8モデルをロード（人物検出用） - 利用可能ならGPUにロード
-        # Load detection model (always load, then move to device if possible)
-        try:
-            self.model = YOLO('yolov8n.pt')
-            if self.use_cuda:
-                try:
-                    # move underlying torch model to device
-                    if hasattr(self.model, 'to'):
-                        try:
-                            # Some ultralytics versions implement .to
-                            self.model.to(self.device_str)
-                        except Exception:
-                            pass
-                    if hasattr(self.model, 'model'):
-                        try:
-                            self.model.model.to(self.device_str)
-                        except Exception:
-                            pass
-                    print(f"[HumanDetector] Moved detection model to {self.device_str}")
-                except Exception as e:
-                    print(f"[HumanDetector] Could not move detection model to {self.device_str}: {e}")
-        except Exception as e:
-            print(f"[HumanDetector] Failed to load detection model: {e}")
-            raise
-
+        # YOLOv8モデルをロード（人物検出用）
+        self.model = YOLO('yolov8n.pt')  # nanoモデル（軽量）
+        
         # セグメンテーション用モデル
-        # Load segmentation model and move to device if possible
-        try:
-            self.seg_model = YOLO('yolov8n-seg.pt')
-            if self.use_cuda:
-                try:
-                    if hasattr(self.seg_model, 'to'):
-                        try:
-                            self.seg_model.to(self.device_str)
-                        except Exception:
-                            pass
-                    if hasattr(self.seg_model, 'model'):
-                        try:
-                            self.seg_model.model.to(self.device_str)
-                        except Exception:
-                            pass
-                    print(f"[HumanDetector] Moved segmentation model to {self.device_str}")
-                except Exception as e:
-                    print(f"[HumanDetector] Could not move segmentation model to {self.device_str}: {e}")
-        except Exception as e:
-            print(f"[HumanDetector] Failed to load segmentation model: {e}")
-            raise
-
-        # NOTE: we do not force half precision conversion here because that
-        # can cause dtype mismatches (Half vs Float) during matmul if inputs
-        # or some parts of the pipeline remain float32. If you want to use
-        # float16, either ensure the entire preprocessing and inputs are
-        # converted to float16, or use an API that supports half inference.
+        self.seg_model = YOLO('yolov8n-seg.pt')  # セグメンテーション用
         
         # UDP通信設定
         self.unity_ip = unity_ip
@@ -138,8 +85,7 @@ class HumanDetector:
         try:
             max_payload = 60000  # UDP安全域
             scale = 1.0
-            # 左右反転してから送信
-            resized_image = cv2.flip(image, 1)
+            resized_image = image
 
             while True:
                 success, buffer = cv2.imencode('.png', resized_image)
@@ -185,57 +131,17 @@ class HumanDetector:
             if w > 50 and h > 50:  # 最小サイズチェック
                 # 少し余裕を持ってクロップ（境界を含む）
                 padding = 10
-                x = x - padding
-                y = y - padding
-                w = w + padding * 2
-                h = h + padding * 2
-
-                # 正方形サイズを決定（人物を収める最小の正方形）
-                side = max(w, h)
-
-                # 中心座標
-                cx = x + w // 2
-                cy = y + h // 2
-
-                # 正方形の左上座標
-                left = int(cx - side // 2)
-                top = int(cy - side // 2)
-                right = left + int(side)
-                bottom = top + int(side)
-
-                img_h, img_w = bg_removed_frame.shape[:2]
-
-                # 取得元の範囲（画像内にクリップ）
-                src_x1 = max(0, left)
-                src_y1 = max(0, top)
-                src_x2 = min(img_w, right)
-                src_y2 = min(img_h, bottom)
-
-                # 出力キャンバス（アルファ付き）を透過で作成
-                out = np.zeros((int(side), int(side), 4), dtype=np.uint8)
-
-                # コピー先のオフセット
-                dst_x1 = src_x1 - left
-                dst_y1 = src_y1 - top
-
-                # コピーサイズ
-                copy_w = src_x2 - src_x1
-                copy_h = src_y2 - src_y1
-
-                if copy_w > 0 and copy_h > 0:
-                    # 入力が BGRA でない場合は BGRA に変換（安全策）
-                    src = bg_removed_frame[src_y1:src_y2, src_x1:src_x2]
-                    if src.shape[2] == 3:
-                        # RGB -> BGRA (alpha 255)
-                        alpha_ch = np.full((src.shape[0], src.shape[1], 1), 255, dtype=np.uint8)
-                        src = np.concatenate([src, alpha_ch], axis=2)
-
-                    out[dst_y1:dst_y1+copy_h, dst_x1:dst_x1+copy_w] = src
-
+                x = max(0, x - padding)
+                y = max(0, y - padding)
+                w = min(frame.shape[1] - x, w + padding * 2)
+                h = min(frame.shape[0] - y, h + padding * 2)
+                
+                cropped_human = bg_removed_frame[y:y+h, x:x+w]
+                
                 # Unityに送信
-                self.send_image_to_unity(out)
-
-                return out
+                self.send_image_to_unity(cropped_human)
+                
+                return cropped_human
         
         return None
     

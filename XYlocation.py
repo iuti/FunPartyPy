@@ -1,4 +1,5 @@
 import cv2
+import torch
 from ultralytics import YOLO
 import numpy as np
 import socket
@@ -101,15 +102,40 @@ class EllipseRegion:
             return
         cv2.polylines(frame, [self.polygon], isClosed=True, color=color, thickness=thickness)
 
-# モデル読み込み
-model = YOLO("yolov8n.pt")
+# GPU / デバイス設定
+use_cuda = torch.cuda.is_available()
+device_str = "cuda:0" if use_cuda else "cpu"
+print(f"Torch CUDA available: {use_cuda}")
+
+# モデル読み込み（利用可能ならGPUへ）
+try:
+    model = YOLO("yolov8n.pt")
+    # move underlying PyTorch model to device if possible
+    if use_cuda:
+        try:
+            if hasattr(model, 'to'):
+                try:
+                    model.to(device_str)
+                except Exception:
+                    pass
+            if hasattr(model, 'model'):
+                try:
+                    model.model.to(device_str)
+                except Exception:
+                    pass
+            print(f"Model moved to {device_str}")
+        except Exception:
+            pass
+except Exception as e:
+    print(f"Failed to load YOLO model: {e}")
+    model = YOLO("yolov8n.pt")
 
 # UDP通信設定
 UDP_IP = "127.0.0.1"  # Unityが動作するIPアドレス（localhost）
 UDP_PORT = 12345      # Unityで受信するポート番号
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(2)
 
 # カメラの解像度を取得
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
